@@ -13,29 +13,29 @@ ESP8266WiFiMulti WiFiMulti;
 // Buat object http
 HTTPClient http;
  
-// Deklarasikan variable untuk suhu
-float vref = 5;
-float resolusi = vref*100/1023;
-float suhu;
+// Deklarasikan variable untuk data
+float vref = 5; //tegangan referensi
+float resolusi = vref*100/1023; //konstanta peubah
+float dust;
 String payload;
 
 //Dust Sensor
 int dustPin = A0; // dust sensor - Wemos A0 pin
-int ledPin = D2;
-int ledKUN = 16;
-int ledBIR = 15;
-int ledHIJ = 12;
-int ledMER = 14;    
+int ledPin = D2; //led pin untuk sensor
+int ledKUN = 16; //gpio pin led kuning
+int ledBIR = 15; //gpio pin led biru
+int ledHIJ = 12; //gpio pin led hijau
+int ledMER = 14; //gpio pin led merah
  
-float voltsMeasured = 0;
-float calcVoltage = 0;
-float dustDensity = 0;
+float voltsMeasured = 0; //variable tampung pengukuran volt sensor
+float calcVoltage = 0; //variable tampung voltase terkalkulasi
+float dustDensity = 0; //variable tampung intensitas debu
 
 // Ini adalah alamat script (URL) yang kita pasang di web server
 // Silahkan sesuaikan alamat IP dengan ip komputer anda atau alamat domain (bila di web hosting)
-// '?suhu=' adalah adalah nama parameter yang akan dikirimkan ke script PHP 
+// '?dust=' adalah adalah nama parameter yang akan dikirimkan ke script PHP 
  
-String url = "http://192.168.43.16/VOLUSINO/Simpandata.php?suhu=";
+String url = "http://192.168.43.16/VOLUSINO/Simpandata.php?dust=";
  
 //===============================
 // SETUP
@@ -43,7 +43,10 @@ String url = "http://192.168.43.16/VOLUSINO/Simpandata.php?suhu=";
  
 void setup() {
   
+ //memulai komunikasi serial
   Serial.begin(57600);
+ 
+ //inisialisai pin mode
   pinMode(ledPin,OUTPUT);
 
   //RGB
@@ -52,9 +55,12 @@ void setup() {
   pinMode(ledMER,OUTPUT);
   pinMode(ledBIR,OUTPUT);
   
+ //memulai komunikasi serial USE
     USE_SERIAL.begin(115200);
     USE_SERIAL.setDebugOutput(false);
-    digitalWrite(ledBIR,HIGH);
+ 
+ //indikator kedip Volusino nyala
+ digitalWrite(ledBIR,HIGH);
     delay(300);
     digitalWrite(ledBIR,LOW);
     delay(300);
@@ -63,6 +69,7 @@ void setup() {
     digitalWrite(ledBIR,LOW);
     delay(300);
     
+ //waiting untuk flushing
     for(uint8_t t = 4; t > 0; t--) {
         USE_SERIAL.printf("[SETUP] Tunggu %d...\n", t);
         USE_SERIAL.flush();
@@ -84,11 +91,18 @@ void setup() {
        digitalWrite(ledMER,LOW);
        delay(166);
     }
+ 
+ //set kondisi led low all
     digitalWrite(ledBIR,LOW);
     digitalWrite(ledMER,LOW);
     digitalWrite(ledKUN,LOW);
     digitalWrite(ledHIJ,LOW);
-    WiFi.mode(WIFI_STA);
+    
+ 
+ //set mode wifi modul ke slave 
+ WiFi.mode(WIFI_STA);
+ 
+ //set konfigurasi SSID & PWD Hotspot yang akan dikonek
     WiFiMulti.addAP("hmsan", "krsbi2019"); // Sesuaikan SSID dan password ini
 }
  
@@ -101,17 +115,18 @@ void loop() {
     digitalWrite(ledPin,LOW); // power on the LED
     delayMicroseconds(280);
  
-    voltsMeasured = analogRead(dustPin); // read the dust value
+    voltsMeasured = analogRead(dustPin); // read the sensor volt value
  
     delayMicroseconds(40);
+ 
     digitalWrite(ledPin,HIGH); // turn the LED off
     delayMicroseconds(9680);
  
-    //measure your 5v and change below
+    //mengolah hasil data sensor ke bentuk satuan intensitas debu (mg/m3)
     calcVoltage = voltsMeasured * (5 / 1024.0);
-   dustDensity = 0.17 * calcVoltage - 0.1;
-   // dustDensity = (voltsMeasured-13)*100/13;
+    dustDensity = 0.17 * calcVoltage - 0.1;
     
+  //serial menampilkan data sensor
     Serial.println("GP2Y1010AU0F readings"); 
     Serial.print("Raw Signal Value = ");
     Serial.println(voltsMeasured); 
@@ -120,12 +135,15 @@ void loop() {
     Serial.print("Dust Density = ");
     Serial.println(dustDensity); // mg/m3
     Serial.println("");
+ 
+ //mengatur kondisi led indikator merah (bahaya), kuning (kurang sehat), hijau (bersih)
     if(dustDensity < 30)digitalWrite(ledHIJ,HIGH);
     else if(dustDensity < 60)digitalWrite(ledKUN,HIGH);
     else if(dustDensity > 60)digitalWrite(ledMER,HIGH);
     delay(1000);
-    // Baca suhu dari pin analog
-    suhu = dustDensity;
+ 
+    //menyimpan data ke variable lain
+    dust = dustDensity;
     //----------------------
  
     // Cek apakah statusnya sudah terhubung
@@ -152,7 +170,7 @@ void loop() {
             }
  
         } else {
- 
+           //jika gagal menampilkan eror
             USE_SERIAL.printf("[HTTP] GET gagal, error: %s\n", http.errorToString(httpCode).c_str());
         }
  
@@ -160,6 +178,8 @@ void loop() {
     }
  
     delay(5000);
+ 
+ //set kondisi  led low all
     digitalWrite(ledBIR,LOW);
     digitalWrite(ledMER,LOW);
     digitalWrite(ledKUN,LOW);
